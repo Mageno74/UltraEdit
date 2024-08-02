@@ -153,8 +153,8 @@ function checkBrackets(cncCode) {
         var line = cncCode[i].replace(/;.*/, "");
 
         if (/^\s*%_N_/.test(line)) {
-            if (printFaults(progName, bracketFault)) {
-                return true;
+            if (bracketFault.length != 0) {
+                break;
             }
             progName = line.replace(/^\s*%_N_/, "");
             bracketFault.length = 0;
