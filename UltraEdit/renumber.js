@@ -321,10 +321,15 @@ function checkBrackets(cncCode) {
 
 function checkIndentationSequence(cncCode) {
 
-    var sequenceFault = {
-        'REIHENFOLGE': Array()
-    }
+    var faultArray = [];
     var stackIndetation = [];
+    var lastIf = [];
+    var stackOpenClose = {
+        'IF': Array(),
+        'WHILE': Array(),
+        'LOOP': Array(),
+        'FOR': Array()
+    };
     var indentations = {
         'IF': 'ENDIF',
         'WHILE': 'ENDWHILE',
@@ -350,23 +355,27 @@ function checkIndentationSequence(cncCode) {
         }
         line = line.replace(/;.*/, "")
         if (!/^.*\bGOTO(F|B)?\b/i.test(line)) {
-            var firstWord = line.match(/^\w+/i)
-            if (firstWord) {
-                firstWord = firstWord[0].toUpperCase()
-            }
+            var firstWord = line.match(/^\w*/i).toUpperCase;
+
             if (firstWord in indentations) {
-                stackIndetation.push(firstWord)
+                stackIndetation.push([firstWord, lineNumber]);
+                stackOpenClose[firstWord].push(firstWord, lineNumber, 'nicht geschlossen');
             } else {
                 for (var key in indentations) {
                     if (indentations[key] == firstWord) {
-                        if (stackIndetation.length == 0 || key != stackIndetation.pop()) {
-                            sequenceFault.REIHENFOLGE.push(lineNumber);
+                        stackOpenClose[key].pop();
+                        if (stackIndetation.length == 0 || key != stackIndetation.pop()[0]) {
+                            faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
                         }
                     }
                 }
                 if (firstWord == 'ELSE') {
-                    if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1] != 'IF') {
-                        sequenceFault.REIHENFOLGE.push(lineNumber);
+                    if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1][0] != 'IF' || 
+                        lastIf.includes(stackSeqence[stackSeqence.length - 1][1])
+                    ) {
+                        faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+                    }else{
+                        lastIf.push(stackIndetation[stackIndetation.length - 1][1])
                     }
                 }
             }
