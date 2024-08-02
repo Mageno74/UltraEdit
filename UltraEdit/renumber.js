@@ -24,12 +24,11 @@ function main() {
 
     // Überprüft ob Klammern paarweise vorkommen
     // Überprüft alle Schleifen auf Vollständigkeit
-    var seq = checkIndentationSequence(codeArray)
-    var ind = checkIndentation(codeArray)
-    var bec = checkBrackets(codeArray)
-    if (seq || ind || bec) {
-        UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen")
-        return
+    var seq = checkIndentationSequence(codeArray);
+    var bec = checkBrackets(codeArray);
+    if (seq || bec) {
+        UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen");
+        return;
     }
 
     // Zeilen formatieren und neu nummerieren
@@ -48,7 +47,7 @@ function main() {
     UltraEdit.activeDocument.write(codeArray + "\r\n");
     UltraEdit.activeDocument.cancelSelect();
 
-    UltraEdit.messageBox("nummeriert und formatiert")
+    UltraEdit.messageBox("nummeriert und formatiert");
 }
 
 
@@ -140,136 +139,12 @@ function deleteEmptyLines(cncCode) {
 
 
 //============================================================
-// Überprüft ob alle Schleifen geschlossen sind
-//============================================================
-
-function checkIndentation(cncCode) {
-    var allFaults = {
-        'IF': Array(),
-        'ELSE': Array(),
-        'ENDIF': Array(),
-        'WHILE': Array(),
-        'ENDWHILE': Array(),
-        'LOOP': Array(),
-        'ENDLOOP': Array(),
-        'FOR': Array(),
-        'ENDFOR': Array()
-    }
-
-    var lastElse = 0;
-
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
-
-    if (/^\s*%_N_/.test(cncCode[0])) {
-        progName = cncCode[0].replace(/^%_N_/, "");
-    }
-
-    for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i];
-        var lineNumber = i + 1;
-        // schreibt bei einem MultiArchiv nach jendem Programm die Fehler in das Ausgabefenster
-        // und alle Werte werden auf Null gesetzt
-        if (/^\s*%_N_/.test(line)) {
-
-            if (printFaults(progName, allFaults)) {
-                return true
-            }
-
-            allFaults.IF.length = 0;
-            allFaults.ENDIF.length = 0;
-            allFaults.ENDWHILE.length = 0;
-            allFaults.ELSE.length = 0;
-            allFaults.WHILE.length = 0;
-            allFaults.LOOP.length = 0;
-            allFaults.ENDLOOP.length = 0;
-            allFaults.ENDFOR.length = 0;
-            allFaults.FOR.length = 0;
-            allFaults.length = 0;
-            lastElse = 0;
-            progName = line.replace(/^\s*%_N_/, "");
-        }
-        // ENDIF
-        if (/^\s*(N\d+)?\s*\bENDIF\b/i.test(line)) {
-            if (allFaults.IF.length == 0) {
-                allFaults.ENDIF.push(lineNumber);
-            } else {
-                var deleteElse = allFaults.IF.pop();
-                var index = allFaults.ELSE.indexOf(deleteElse);
-                if (index !== -1) {
-                    allFaults.ELSE.splice(index, 1);
-                }
-            }
-            continue;
-        }
-        // IF
-        if (/^\s*(N\d+)?\s*\bIF\b/i.test(line) && !/^.*\s\bGOTO(F|B)?\b/i.test(line)) {
-            allFaults.IF.push(lineNumber);
-            allFaults.ELSE.push(lineNumber);
-            continue;
-        }
-        // ELSE
-        if (/^\s*(N\d+)?\s*\bELSE\b/i.test(line)) {
-            if (allFaults.IF.length == 0 || lastElse == allFaults.IF[allFaults.IF.length - 1]) {
-                allFaults.ELSE.push(lineNumber);
-            } else {
-                allFaults.ELSE.pop();
-                lastElse = allFaults.IF[allFaults.IF.length - 1]
-            }
-            continue;
-        }
-        // ENDWHILE
-        if (/^\s*(N\d+)?\s*\bENDWHILE\b/i.test(line)) {
-            if (allFaults.WHILE.length == 0) {
-                allFaults.ENDWHILE.push(lineNumber);
-            } else {
-                allFaults.WHILE.pop();
-            }
-            continue;
-        }
-        // WHILE
-        if (/^\s*(N\d+)?\s*\bWHILE\b/i.test(line)) {
-            allFaults.WHILE.push(lineNumber);
-        }
-        // ENDLOOP
-        if (/^\s*(N\d+)?\s*\bENDLOOP\b/i.test(line)) {
-            if (allFaults.LOOP.length == 0) {
-                allFaults.ENDLOOP.push(lineNumber);
-            } else {
-                allFaults.LOOP.pop();
-            }
-            continue;
-        }
-        // LOOP
-        if (/^\s*(N\d+)?\s*\bLOOP\b/i.test(line)) {
-            allFaults.LOOP.push(lineNumber);
-            continue;
-        }
-        // ENDFOR
-        if (/^\s*(N\d+)?\s*\bENDFOR\b/i.test(line)) {
-            if (allFaults.FOR.length == 0) {
-                allFaults.ENDFOR.push(lineNumber);
-            } else {
-                allFaults.FOR.pop();
-            }
-            continue;
-        }
-        // FOR
-        if (/^\s*(N\d+)?\s*\bFOR\b/i.test(line)) {
-            allFaults.FOR.push(lineNumber);
-        }
-    }
-    return printFaults(progName, allFaults)
-}
-
-//============================================================
 // Überprüft ob Klammern paarweise vorkommen
 //============================================================
 
 function checkBrackets(cncCode) {
 
-    var bracketFault = {
-        'KlAMMER': Array()
-    }
+    var bracketFault = [];
     var bracketes = {
         '(': ')',
         '{': '}',
@@ -289,19 +164,19 @@ function checkBrackets(cncCode) {
 
         if (/^\s*%_N_/.test(line)) {
             if (printFaults(progName, bracketFault)) {
-                return true
+                return true;
             }
             progName = line.replace(/^\s*%_N_/, "");
-            bracketFault.KlAMMER.length = 0;
+            bracketFault.length = 0;
         }
         for (var n = 0; n < line.length; n++) {
             if (line[n] in bracketes) {
-                stackBrackets.push(line[n])
+                stackBrackets.push(line[n]);
             } else {
                 for (var key in bracketes) {
                     if (bracketes[key] == line[n]) {
                         if (stackBrackets.length == 0 || key != stackBrackets.pop()) {
-                            bracketFault.KlAMMER.push(lineNumber);
+                            bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
                             continue zeilenLoop;
                         }
                     }
@@ -309,7 +184,7 @@ function checkBrackets(cncCode) {
             }
         }
         if (stackBrackets.length != 0) {
-            bracketFault.KlAMMER.push(lineNumber);
+            bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
         }
     }
     return printFaults(progName, bracketFault);
@@ -321,10 +196,15 @@ function checkBrackets(cncCode) {
 
 function checkIndentationSequence(cncCode) {
 
-    var sequenceFault = {
-        'REIHENFOLGE': Array()
-    }
+    var faultArray = [];
     var stackIndetation = [];
+    var lastIf = [];
+    var stackOpenClose = {
+        'IF': Array(),
+        'WHILE': Array(),
+        'LOOP': Array(),
+        'FOR': Array()
+    };
     var indentations = {
         'IF': 'ENDIF',
         'WHILE': 'ENDWHILE',
@@ -341,38 +221,46 @@ function checkIndentationSequence(cncCode) {
         var line = cncCode[i].replace(/^\s*(N\d+\s*)?/, "");
 
         if (/^\s*%_N_/.test(line)) {
-            if (printFaults(progName, sequenceFault)) {
-                return true
+            if (stackIndetation.length != 0 || faultArray.length != 0) {
+                break;
             }
             progName = line.replace(/^\s*%_N_/, "");
-            sequenceFault.REIHENFOLGE.length = 0;
+            faultArray.length = 0;
             var stackIndetation = [];
         }
-        line = line.replace(/;.*/, "")
+        line = line.replace(/;.*/, "");
         if (!/^.*\bGOTO(F|B)?\b/i.test(line)) {
-            var firstWord = line.match(/^\w+/i)
-            if (firstWord) {
-                firstWord = firstWord[0].toUpperCase()
-            }
+            var firstWord = line.match(/^\w*/i)[0].toUpperCase();
             if (firstWord in indentations) {
-                stackIndetation.push(firstWord)
+                stackIndetation.push([firstWord, lineNumber]);
+                stackOpenClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
             } else {
                 for (var key in indentations) {
                     if (indentations[key] == firstWord) {
-                        if (stackIndetation.length == 0 || key != stackIndetation.pop()) {
-                            sequenceFault.REIHENFOLGE.push(lineNumber);
+                        stackOpenClose[key].pop();
+                        if (stackIndetation.length == 0 || stackIndetation.pop()[0] != key) {
+                            faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
                         }
                     }
                 }
-                if (firstWord == 'ELSE') {
-                    if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1] != 'IF') {
-                        sequenceFault.REIHENFOLGE.push(lineNumber);
-                    }
+            }
+            if (firstWord == 'ELSE') {
+                if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1][0] != 'IF' ||
+                    lastIf[lastIf.length - 1] == stackIndetation[stackIndetation.length - 1][1]
+                ) {
+                    faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+                } else {
+                    lastIf.push(stackIndetation[stackIndetation.length - 1][1]);
                 }
             }
         }
     }
-    return printFaults(progName, sequenceFault);
+    for (var key in stackOpenClose) {
+        for (var i = 0; i < stackOpenClose[key].length; i++) {
+            faultArray.push(stackOpenClose[key][i]);
+        }
+    }
+    return printFaults(progName, faultArray);
 }
 
 
@@ -381,27 +269,14 @@ function checkIndentationSequence(cncCode) {
 //============================================================
 
 function printFaults(progamName, allFaults) {
-
-    // löscht alle Zeilennummern aus dem ELSE Array, die bereits als Fehler im IF Array vorhanden sind
-    if ('IF' in allFaults) {
-        for (var i = 0; i < allFaults.IF.length; i++) {
-            var index = allFaults.ELSE.indexOf(allFaults.IF[i]);
-            if (index !== -1) {
-                allFaults.ELSE.splice(index, 1);
-            }
-        }
+    var isFault = false;
+    for (var i = 0; i < allFaults.length; i++) {
+        UltraEdit.outputWindow.write("Im Programm >> " + progamName + " >> " + allFaults[i][0] + " << " + allFaults[i][2] + " ==> Zeile " + allFaults[i][1]);
+        printOneFault(allFaults[i]);
+        UltraEdit.outputWindow.showWindow(true);
+        isFault = true;
     }
-    // Gibt Fehler aus
-    var isFault = false
-    for (var key in allFaults) {
-        if (allFaults[key].length > 0) {
-            UltraEdit.outputWindow.write("Im Programm >> " + progamName + " >> " + key + " Fehler in Zeile/n = " + allFaults[key].join(", "));
-            printOneFault(allFaults[key]);
-            UltraEdit.outputWindow.showWindow(true);
-            isFault = true
-        }
-    }
-    return isFault
+    return isFault;
 }
 
 
@@ -411,9 +286,8 @@ function printFaults(progamName, allFaults) {
 
 function printOneFault(faults) {
     var pathDoc = unescape(encodeURIComponent(UltraEdit.activeDocument.path));
-    for (var i = 0; i < faults.length; i++)
-        UltraEdit.outputWindow.write(pathDoc + "(" + faults[i] + "): ");
-    UltraEdit.outputWindow.write("======================================================================")
+    UltraEdit.outputWindow.write(pathDoc + "(" + faults[1] + "): ");
+    UltraEdit.outputWindow.write("======================================================================");
 }
 
 
