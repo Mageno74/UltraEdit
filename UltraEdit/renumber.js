@@ -206,6 +206,13 @@ function checkIndentationSequence(cncCode) {
         'LOOP': Array(),
         'FOR': Array()
     };
+    var lastIf = [];
+    var stackOpenClose = {
+        'IF': Array(),
+        'WHILE': Array(),
+        'LOOP': Array(),
+        'FOR': Array()
+    };
     var indentations = {
         'IF': 'ENDIF',
         'WHILE': 'ENDWHILE',
