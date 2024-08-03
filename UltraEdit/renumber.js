@@ -197,7 +197,6 @@ function checkBrackets(cncCode) {
 function checkIndentationSequence(cncCode) {
 
     var faultArray = [];
-    var faultArray = [];
     var stackIndetation = [];
     var lastIf = [];
     var stackOpenClose = {
