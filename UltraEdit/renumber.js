@@ -56,7 +56,7 @@ function main() {
 //============================================================
 
 function renumberCncCode(cncCode) {
-    var tab = '  '; // Einrückung für IF oder WHILE
+    var tab = '  '; // Einrückung für IF oder WHILE -> bei Bedarf ändern
     var count = 0;
     renumberCNC = Array();
 
@@ -121,7 +121,7 @@ function renumberCncCode(cncCode) {
 
 function deleteEmptyLines(cncCode) {
     var countEmptyLine = 0;
-    var maxEmptyLine = 1;  //maximale Anzahl leerer Zeilen
+    var maxEmptyLine = 1;  //maximale Anzahl leerer Zeilen -> bei Bedarf ändern
     // Löscht alle leeren Zeilen bis auf eine
     for (var i = 0; i < cncCode.length; i++) {
         if (cncCode[i] == '') {
