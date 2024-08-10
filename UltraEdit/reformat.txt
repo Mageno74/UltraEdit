@@ -9,8 +9,6 @@ Nach der Zeilennummer werden alle Leerzeichen bis auf eins entfernt.
 Mehr als eine Leerzeile wird entfernt
 Einrückung reformatieren bei IF, While und LOOP.
 Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise vorkommen.
-version2
-Orginal
 */
 
 //============================================================
@@ -288,4 +286,3 @@ function printOneFault(faults) {
 //============================================================
 
 main()
-
