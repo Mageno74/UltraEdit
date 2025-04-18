@@ -1,6 +1,6 @@
 README
 
-Script zum nummerieren und formatieren vom Siemens Sinumerik 840d Programmen 
+Script für den UltraEdit zum nummerieren und formatieren vom Siemens Sinumerik 840d Programmen 
 
 Features
 
