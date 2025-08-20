@@ -22,6 +22,12 @@ function main() {
     UltraEdit.activeDocument.cancelSelect();
     var codeArray = Array(); codeArray = cncCode.split(/\r?\n/);
 
+    // überprüft ob es im HEX Format ist
+    if (checkIsHex(codeArray)) {
+        UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
+        return;
+    }
+
     // Überprüft ob Klammern paarweise vorkommen
     // Überprüft alle Schleifen auf Vollständigkeit
     var seq = checkIndentationSequence(codeArray);
@@ -50,13 +56,26 @@ function main() {
     UltraEdit.messageBox("formatiert")
 }
 
+//============================================================
+// kontrolliert ob eine Datei im HEX Format ist
+//============================================================
+
+function checkIsHex(cncCode) {
+    for (var i = 0; i < cncCode.length; i++) {
+        var line = cncCode[i];
+        if (/^\s*@/.test(line)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 //============================================================
 // Formatiert den CNC Code 
 //============================================================
 
 function reformatCncCode(cncCode) {
-    var tab = '  '; // Einrückung für IF oder WHILE
+    var tab = '  '; // Einrückung für IF oder WHILE -> bei Bedarf ändern
     var count = 0;
     renumberCNC = Array();
 
@@ -111,7 +130,7 @@ function reformatCncCode(cncCode) {
 
 function deleteEmptyLines(cncCode) {
     var countEmptyLine = 0;
-    var maxEmptyLine = 1;  //maximale Anzahl leerer Zeilen
+    var maxEmptyLine = 1;  //maximale Anzahl leerer Zeilen -> bei Bedarf ändern
     // Löscht alle leeren Zeilen bis auf eine
     for (var i = 0; i < cncCode.length; i++) {
         if (cncCode[i] == '') {
@@ -150,7 +169,8 @@ function checkBrackets(cncCode) {
     for (var i = 0; i < cncCode.length; i++) {
         var stackBrackets = [];
         lineNumber = i + 1;
-        var line = cncCode[i].replace(/;.*/, "");
+        var line = cncCode[i].replace(/"[^"]*"/g, "");
+        line = line.replace(/;.*/, "");
 
         if (/^\s*%_N_/.test(line)) {
             if (bracketFault.length != 0) {

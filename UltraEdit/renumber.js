@@ -22,6 +22,12 @@ function main() {
     UltraEdit.activeDocument.cancelSelect();
     var codeArray = Array(); codeArray = cncCode.split(/\r?\n/);
 
+    // überprüft ob es im HEX Format ist
+    if (checkIsHex(codeArray)) {
+        UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
+        return;
+    }
+
     // Überprüft ob Klammern paarweise vorkommen
     // Überprüft alle Schleifen auf Vollständigkeit
     var seq = checkIndentationSequence(codeArray);
@@ -50,6 +56,19 @@ function main() {
     UltraEdit.messageBox("nummeriert und formatiert");
 }
 
+//============================================================
+// kontrolliert ob eine Datei im HEX Format ist
+//============================================================
+
+function checkIsHex(cncCode) {
+    for (var i = 0; i < cncCode.length; i++) {
+        var line = cncCode[i];
+        if (/^\s*@/.test(line)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 //============================================================
 // Formatiert den CNC Code 
@@ -160,7 +179,8 @@ function checkBrackets(cncCode) {
     for (var i = 0; i < cncCode.length; i++) {
         var stackBrackets = [];
         lineNumber = i + 1;
-        var line = cncCode[i].replace(/;.*/, "");
+        var line = cncCode[i].replace(/"[^"]*"/g, "");
+        line = line.replace(/;.*/, "");
 
         if (/^\s*%_N_/.test(line)) {
             if (bracketFault.length != 0) {
