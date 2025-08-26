@@ -138,12 +138,11 @@ function searchProgStart(oneLine) {
 function renumberCncCode(cncCode) {
     var tab = indentations();
     var count = 0;
-    var result;
     var regLineNum = new RegExp(ZEILENNUMMER, FLAGS);
     var regLineNumCom = new RegExp(ZEILENNUMMER + ';', FLAGS);
     var regOnlyLineNum = new RegExp(ZEILENNUMMER + '(\\s|$)', FLAGS);
 
-    var tempRenumber = Array();
+    var renumbProg = Array();
 
     var [startNum, step] = getStartNumber();
     var lineNumber = startNum;
@@ -155,8 +154,9 @@ function renumberCncCode(cncCode) {
             lineNumber = startNum;
             count = 0;
         }
+        var result;
         if ((result = unchangeLine(line)) !== false) {
-            tempRenumber.push(result);
+            renumbProg.push(result);
             continue zeilenLoop;
         }
         if (regLineNumCom.test(line)) {
@@ -179,11 +179,11 @@ function renumberCncCode(cncCode) {
         }
         if (!/^$/.test(line)) {
             line = 'N' + lineNumber + line;
-            tempRenumber.push(line);
+            renumbProg.push(line);
             lineNumber += step;
         }
     }
-    return tempRenumber;
+    return renumbProg;
 }
 
 //============================================================

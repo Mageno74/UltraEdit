@@ -138,22 +138,21 @@ function searchProgStart(oneLine) {
 function reformatCncCode(cncCode) {
     var tab = indentations();
     var count = 0;
-    var result;
     var regLineNum = new RegExp(ZEILENNUMMER, FLAGS);
     var regLineNumCom = new RegExp(ZEILENNUMMER + ';', FLAGS);
     var regOnlyLineNum = new RegExp(ZEILENNUMMER + '(\\s|$)', FLAGS);
 
-    var renumberCNC = Array();
+    var renumbProg = Array();
 
     zeilenLoop:
     for (var i = 0; i < cncCode.length; i++) {
         var line = cncCode[i];
         if (searchProgStart(line)) {
-
             count = 0;
         }
+        var result;
         if ((result = unchangeLine(line)) !== false) {
-            tempRenumber.push(result);
+            renumbProg.push(result);
             continue zeilenLoop;
         }
         if (regLineNumCom.test(line)) {
@@ -180,10 +179,10 @@ function reformatCncCode(cncCode) {
         }
         if (!/^$/.test(line)) {
             line = orgNumber + line;
-            renumberCNC.push(line);
+            renumbProg.push(line);
         }
     }
-    return tempRenumber;
+    return renumbProg;
 }
 
 //============================================================
