@@ -32,18 +32,18 @@ function main() {
     UltraEdit.activeDocument.selectAll();
     var cncCode = UltraEdit.activeDocument.selection;
     UltraEdit.activeDocument.cancelSelect();
-    var codeArray = cncCode.split(/\r?\n/);
+    var orgArray = cncCode.split(/\r?\n/);
 
     // überprüft ob es im HEX Format ist
-    if (checkIsHex(codeArray)) {
+    if (checkIsHex(orgArray)) {
         UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
         return;
     }
 
     // Überprüft alle Schleifen auf Vollständigkeit
-    var seq = checkIndentationSequence(codeArray);
+    var seq = checkIndentationSequence(orgArray);
     // Überprüft ob Klammern paarweise vorkommen
-    var bec = checkBrackets(codeArray);
+    var bec = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
     if (seq || bec) {
         UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen");
@@ -51,13 +51,13 @@ function main() {
     }
 
     // Zeilen formatieren und neu nummerieren
-    var renumberCNC = renumberCncCode(codeArray);
+    var reNumbArray = renumberCncCode(orgArray);
 
     // Löscht alle leeren Zeilen bis auf eine
-    var withoutEmptyLines = deleteEmptyLines(renumberCNC);
+    var noEptLinArray = deleteEmptyLines(reNumbArray);
 
     // Verbindet die einzelnen Zeilen wieder
-    var newArray = withoutEmptyLines.join('\r\n');
+    var newArray = noEptLinArray.join('\r\n');
 
     // Überschreibt das Original
     UltraEdit.activeDocument.selectAll();
@@ -210,34 +210,40 @@ function removeString(oneLine) {
 }
 
 //============================================================
+// gibt den Programmname zurück
+//============================================================
+function getProgName(oneRow) {
+    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
+    if (NEUPROG.test(oneRow)) {
+        progName = oneRow.replace(NEUPROG, "");
+    }
+    return progName;
+}
+
+//============================================================
 // Überprüft ob Klammern paarweise vorkommen
 //============================================================
 function checkBrackets(cncCode) {
     var bracketFault = [];
-    var stackBrackets = [];
     var bracketes = {
         '(': ')',
         '{': '}',
         '[': ']'
     };
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
 
-    if (NEUPROG.test(cncCode[0])) {
-        progName = cncCode[0].replace(NEUPROG, "");
-    }
-    var line;
+    var progName = getProgName(cncCode[0]);
+
     zeilenLoop:
     for (var i = 0; i < cncCode.length; i++) {
-        stackBrackets = [];
+        var stackBrackets = [];
         var lineNumber = i + 1;
-        line = removeString(cncCode[i]);
+        var line = removeString(cncCode[i]);
 
         if (NEUPROG.test(line)) {
             if (bracketFault.length != 0) {
                 break;
             }
-            progName = line.replace(NEUPROG, "");
-            bracketFault.length = 0;
+            progName = getProgName(line);
         }
         for (var n = 0; n < line.length; n++) {
             if (line[n] in bracketes) {
@@ -279,11 +285,9 @@ function checkIndentationSequence(cncCode) {
         'LOOP': 'ENDLOOP',
         'FOR': 'ENDFOR'
     };
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
 
-    if (NEUPROG.test(cncCode[0])) {
-        progName = cncCode[0].replace(NEUPROG, "");
-    }
+    var progName = getProgName(cncCode[0]);
+
     for (var i = 0; i < cncCode.length; i++) {
         var lineNumber = i + 1;
         var line = cncCode[i].replace(/^\s*(N\d+\s*)?/, "");
@@ -292,9 +296,7 @@ function checkIndentationSequence(cncCode) {
             if (stackIndetation.length != 0 || faultArray.length != 0) {
                 break;
             }
-            progName = line.replace(NEUPROG, "");
-            faultArray.length = 0;
-            stackIndetation.length = 0;
+            progName = getProgName(line);
         }
         line = line.replace(/;.*/, "");
         if (!/^.*\bGOTO(F|B)?\b/i.test(line)) {
