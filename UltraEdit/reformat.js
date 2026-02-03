@@ -15,7 +15,7 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 // Variablen 
 //============================================================
 var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
-var LEEREZEILEN = 1; // Anzahl der leeren Zeilen -> bei Bedarf ändern
+var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
 
 //============================================================
 // Reguläre Ausdrücke
@@ -46,7 +46,7 @@ function main() {
     var bec = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
     if (seq || bec) {
-        UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen");
+        UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
         return;
     }
 
