@@ -12,45 +12,58 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 */
 
 //============================================================
+// Variablen 
+//============================================================
+var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
+var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
+var STATNUMMER = 1000; // Startnummer -> bei Bedarf ändern
+var INCREMENT = 5; // Inkrement -> bei Bedarf ändern
+
+//============================================================
+// Reguläre Ausdrücke
+//============================================================
+var ZEILENNUMMER = '^\\s*N\\d+';
+var NEUPROG = /^\s*%_N_/;
+var FLAGS = 'i';
+
+//============================================================
 // Main funktion
 //============================================================
-
 function main() {
     UltraEdit.columnModeOff();
     UltraEdit.activeDocument.selectAll();
     var cncCode = UltraEdit.activeDocument.selection;
     UltraEdit.activeDocument.cancelSelect();
-    var codeArray = Array(); codeArray = cncCode.split(/\r?\n/);
+    var orgArray = cncCode.split(/\r?\n/);
 
     // überprüft ob es im HEX Format ist
-    if (checkIsHex(codeArray)) {
+    if (checkIsHex(orgArray)) {
         UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
         return;
     }
 
-    // Überprüft ob Klammern paarweise vorkommen
     // Überprüft alle Schleifen auf Vollständigkeit
-    var seq = checkIndentationSequence(codeArray);
-    var bec = checkBrackets(codeArray);
+    var seq = checkIndentationSequence(orgArray);
+    // Überprüft ob Klammern paarweise vorkommen
+    var bec = checkBrackets(orgArray);
+    // wenn ein Fehler gefunden wird, wird abgebrochen
     if (seq || bec) {
         UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen");
         return;
     }
 
     // Zeilen formatieren und neu nummerieren
-    var renumberCNC = Array();
-    renumberCNC = renumberCncCode(codeArray);
+    var reNumbArray = renumberCncCode(orgArray);
 
     // Löscht alle leeren Zeilen bis auf eine
-    var withoutEmptyLines = Array();
-    withoutEmptyLines = deleteEmptyLines(renumberCNC);
+    var noEptLinArray = deleteEmptyLines(reNumbArray);
 
     // Verbindet die einzelnen Zeilen wieder
-    codeArray = withoutEmptyLines.join('\r\n');
+    var newArray = noEptLinArray.join('\r\n');
 
-    // Überschreibt das Orginal
+    // Überschreibt das Original
     UltraEdit.activeDocument.selectAll();
-    UltraEdit.activeDocument.write(codeArray + "\r\n");
+    UltraEdit.activeDocument.write(newArray + '\r\n');
     UltraEdit.activeDocument.cancelSelect();
 
     UltraEdit.messageBox("nummeriert und formatiert");
@@ -59,7 +72,6 @@ function main() {
 //============================================================
 // kontrolliert ob eine Datei im HEX Format ist
 //============================================================
-
 function checkIsHex(cncCode) {
     for (var i = 0; i < cncCode.length; i++) {
         var line = cncCode[i];
@@ -71,123 +83,169 @@ function checkIsHex(cncCode) {
 }
 
 //============================================================
-// Formatiert den CNC Code 
+// Eingabe von Startnummer und Schritt
 //============================================================
+function getStartNumber() {
+    var startNumber = parseInt(UltraEdit.getValue("Startnummer (Standard=" + STATNUMMER +")", 1), 10);
+    var increment = parseInt(UltraEdit.getValue("Increment (Standard=" + INCREMENT + ")", 1), 10);
 
-function renumberCncCode(cncCode) {
-    var tab = '  '; // Einrückung für IF oder WHILE -> bei Bedarf ändern
-    var count = 0;
-    renumberCNC = Array();
-
-    var startNumber = UltraEdit.getValue("Startnummer (Standart=1000) = ", 1);
-    var increment = UltraEdit.getValue("Increment (Standart=5) = ", 1);
-
-    if (!/^\d+$/.test(startNumber) || (startNumber > 999999 || startNumber < 1)) {
-        startNumber = 1000;
+    if (isNaN(startNumber) || startNumber > 999999 || startNumber < 1) {
+        startNumber = STATNUMMER;
     }
-
-    if (!/^\d+$/.test(increment) || (increment > 9999 || increment < 1)) {
-        increment = 5;
+    if (isNaN(increment) || increment > 9999 || increment < 1) {
+        increment = INCREMENT;
     }
-
-    var lineNumber = startNumber;
-    for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i];
-        if (/^\s*%_N_/.test(line)) {
-            lineNumber = startNumber;
-            count = 0;
-        }
-
-        if (/^\s*%_N_/.test(line) || /^\s*;/.test(line) || /^$/.test(line)) {
-            line = line.replace(/^\s+/, '');
-            line = line.replace(/\s+$/, '');
-            renumberCNC.push(line);
-        } else {
-            if (/^\s*N\d+;/i.test(line)) {
-                line = line.replace(/^\s*N\d+/i, '');
-            } else {
-                line = line.replace(/^\s*N\d+(\s|$)/i, '');
-                line = line.replace(/^\s+/, '');
-                line = line.replace(/\s+$/, '');
-                if (/^\s*\b(ENDIF|ELSE|ENDWHILE|ENDLOOP|ENDFOR)\b/i.test(line) && count > 0) {
-                    count--;
-                }
-                var space = ' ';
-                for (var n = 0; n < count; n++) {
-                    space += tab;
-                }
-                if (!/^$/.test(line)) {
-                    line = space + line;
-                }
-                if ((/^\s*\b(IF|ELSE|WHILE|LOOP|FOR)\b/i.test(line) && !/^.*\bGOTO(F|B)?\b/i.test(line))) {
-                    count++;
-                }
-            }
-            if (!/^$/.test(line)) {
-                line = 'N' + lineNumber + line;
-                renumberCNC.push(line);
-                lineNumber += increment;
-            }
-        }
-    }
-    return renumberCNC;
+    return [startNumber, increment];
 }
 
+//============================================================
+// Standardeinrückung festlegen
+//============================================================
+function indentations() {
+    var tabSize = '';
+    for (var i = 0; i < EINRUECKUNG; i++) {
+        tabSize += ' ';
+    }
+    return tabSize;
+}
+
+//============================================================
+// sucht nach Zeilen die nicht verändert werden sollen
+//============================================================
+function unchangeLine(oneLine) {
+    if (NEUPROG.test(oneLine) || /^\s*;/.test(oneLine) || /^$/.test(oneLine)) {
+        oneLine = oneLine.trim();
+        return oneLine;
+    }
+    return false;
+}
+
+//============================================================
+// Sucht Programmanfang
+//============================================================
+function searchProgStart(oneLine) {
+    return NEUPROG.test(oneLine);
+}
+
+//============================================================
+// Formatiert den CNC Code 
+//============================================================
+function renumberCncCode(cncCode) {
+    var tab = indentations();
+    var count = 0;
+    var regLineNum = new RegExp(ZEILENNUMMER, FLAGS);
+    var regLineNumCom = new RegExp(ZEILENNUMMER + ';', FLAGS);
+    var regOnlyLineNum = new RegExp(ZEILENNUMMER + '(\\s|$)', FLAGS);
+
+    var renumbProg = [];
+
+    var startNumStep = getStartNumber();
+    var startNum = startNumStep[0];
+    var step = startNumStep[1];
+    var lineNumber = startNum;
+
+    zeilenLoop:
+    for (var i = 0; i < cncCode.length; i++) {
+        var line = cncCode[i];
+        if (searchProgStart(line)) {
+            lineNumber = startNum;
+            count = 0;
+        }
+        var result;
+        if ((result = unchangeLine(line)) !== false) {
+            renumbProg.push(result);
+            continue zeilenLoop;
+        }
+        if (regLineNumCom.test(line)) {
+            line = line.replace(regLineNum, '');
+        } else {
+            line = line.replace(regOnlyLineNum, '').trim();
+            if (/^\s*\b(ENDIF|ELSE|ENDWHILE|ENDLOOP|ENDFOR)\b/i.test(line) && count > 0) {
+                count--;
+            }
+            var space = ' ';
+            for (var n = 0; n < count; n++) {
+                space += tab;
+            }
+            if (!/^$/.test(line)) {
+                line = space + line;
+            }
+            if ((/^\s*\b(IF|ELSE|WHILE|LOOP|FOR)\b/i.test(line) && !/^.*\bGOTO(F|B)?\b/i.test(line))) {
+                count++;
+            }
+        }
+        if (!/^$/.test(line)) {
+            line = 'N' + lineNumber + line;
+            renumbProg.push(line);
+            lineNumber += step;
+        }
+    }
+    return renumbProg;
+}
 
 //============================================================
 // Löscht alle leeren Zeilen bis auf eine
 //============================================================
-
 function deleteEmptyLines(cncCode) {
+    var result = [];
     var countEmptyLine = 0;
-    var maxEmptyLine = 1;  //maximale Anzahl leerer Zeilen -> bei Bedarf ändern
-    // Löscht alle leeren Zeilen bis auf eine
     for (var i = 0; i < cncCode.length; i++) {
-        if (cncCode[i] == '') {
+        if (cncCode[i].trim() == '') {
             countEmptyLine++;
         } else {
             countEmptyLine = 0;
         }
-        if (countEmptyLine > maxEmptyLine) {
-            cncCode.splice(i, 1);
-            i--;
+        if (countEmptyLine <= LEEREZEILEN) {
+            result.push(cncCode[i]);
         }
     }
-    return cncCode;
+    return result;
 }
 
+//============================================================
+// Entfernt Strings und Kommentare
+//============================================================
+function removeString(oneLine) {
+    var line = oneLine.replace(/"[^"]*"/g, "");
+    line = line.replace(/;.*/, "");
+    return line;
+}
+
+//============================================================
+// gibt den Programmname zurück
+//============================================================
+function getProgName(oneRow) {
+    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
+    if (NEUPROG.test(oneRow)) {
+        progName = oneRow.replace(NEUPROG, "");
+    }
+    return progName;
+}
 
 //============================================================
 // Überprüft ob Klammern paarweise vorkommen
 //============================================================
-
 function checkBrackets(cncCode) {
-
     var bracketFault = [];
     var bracketes = {
         '(': ')',
         '{': '}',
         '[': ']'
     };
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
 
-    if (/^\s*%_N_/.test(cncCode[0])) {
-        progName = cncCode[0].replace(/^\s*%_N_/, "");
-    }
+    var progName = getProgName(cncCode[0]);
 
     zeilenLoop:
     for (var i = 0; i < cncCode.length; i++) {
         var stackBrackets = [];
-        lineNumber = i + 1;
-        var line = cncCode[i].replace(/"[^"]*"/g, "");
-        line = line.replace(/;.*/, "");
+        var lineNumber = i + 1;
+        var line = removeString(cncCode[i]);
 
-        if (/^\s*%_N_/.test(line)) {
+        if (NEUPROG.test(line)) {
             if (bracketFault.length != 0) {
                 break;
             }
-            progName = line.replace(/^\s*%_N_/, "");
-            bracketFault.length = 0;
+            progName = getProgName(line);
         }
         for (var n = 0; n < line.length; n++) {
             if (line[n] in bracketes) {
@@ -213,17 +271,15 @@ function checkBrackets(cncCode) {
 //============================================================
 // Überprüft ob Anweisungen paarweise vorkommen
 //============================================================
-
 function checkIndentationSequence(cncCode) {
-
     var faultArray = [];
     var stackIndetation = [];
     var lastIf = [];
     var stackOpenClose = {
-        'IF': Array(),
-        'WHILE': Array(),
-        'LOOP': Array(),
-        'FOR': Array()
+        'IF': [],
+        'WHILE': [],
+        'LOOP': [],
+        'FOR': []
     };
     var indentations = {
         'IF': 'ENDIF',
@@ -231,26 +287,23 @@ function checkIndentationSequence(cncCode) {
         'LOOP': 'ENDLOOP',
         'FOR': 'ENDFOR'
     };
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
 
-    if (/^\s*%_N_/.test(cncCode[0])) {
-        progName = cncCode[0].replace(/^\s*%_N_/, "");
-    }
+    var progName = getProgName(cncCode[0]);
+
     for (var i = 0; i < cncCode.length; i++) {
-        lineNumber = i + 1;
+        var lineNumber = i + 1;
         var line = cncCode[i].replace(/^\s*(N\d+\s*)?/, "");
 
-        if (/^\s*%_N_/.test(line)) {
+        if (NEUPROG.test(line)) {
             if (stackIndetation.length != 0 || faultArray.length != 0) {
                 break;
             }
-            progName = line.replace(/^\s*%_N_/, "");
-            faultArray.length = 0;
-            var stackIndetation = [];
+            progName = getProgName(line);
         }
         line = line.replace(/;.*/, "");
         if (!/^.*\bGOTO(F|B)?\b/i.test(line)) {
-            var firstWord = line.match(/^\w*/i)[0].toUpperCase();
+            var firstWordMatch = line.match(/^\w*/i);
+            var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
             if (firstWord in indentations) {
                 stackIndetation.push([firstWord, lineNumber]);
                 stackOpenClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
@@ -283,11 +336,9 @@ function checkIndentationSequence(cncCode) {
     return printFaults(progName, faultArray);
 }
 
-
 //============================================================
 // Fehlerausgabe im Ausgabefenster
 //============================================================
-
 function printFaults(progamName, allFaults) {
     var isFault = false;
     for (var i = 0; i < allFaults.length; i++) {
@@ -299,21 +350,17 @@ function printFaults(progamName, allFaults) {
     return isFault;
 }
 
-
 //============================================================
 // Fehlerausgabe mit Zeilennummer als Link
 //============================================================
-
 function printOneFault(faults) {
     var pathDoc = unescape(encodeURIComponent(UltraEdit.activeDocument.path));
     UltraEdit.outputWindow.write(pathDoc + "(" + faults[1] + "): ");
     UltraEdit.outputWindow.write("======================================================================");
 }
 
-
 //============================================================
-//Programmaufruf
+// Programmaufruf
 //============================================================
-
 main()
 
