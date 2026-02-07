@@ -32,9 +32,9 @@ function main() {
     UltraEdit.insertMode();
     UltraEdit.columnModeOff();
     UltraEdit.activeDocument.selectAll();
-    var cncCode = UltraEdit.activeDocument.selection;
+    var doc = UltraEdit.activeDocument.selection;
     UltraEdit.activeDocument.cancelSelect();
-    var orgArray = cncCode.split(/\r?\n/);
+    var orgArray = doc.split(/\r?\n/);
 
     UltraEdit.messageBox(checkIsHex(orgArray));
     // überprüft ob es im HEX Format ist
@@ -43,11 +43,11 @@ function main() {
     }
 
     // Überprüft alle Schleifen auf Vollständigkeit
-    var seq = checkIndentationSequence(orgArray);
+    var sequence = checkIndentationSequence(orgArray);
     // Überprüft ob Klammern paarweise vorkommen
-    var bec = checkBrackets(orgArray);
+    var brackets = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
-    if (seq || bec) {
+    if (sequence || brackets) {
         if (BRAKE){
             UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
             return;
@@ -82,7 +82,7 @@ function checkIsHex(cncCode) {
             return true;
         }
     }
-    //return false;
+    return false;
 }
 
 //============================================================
@@ -126,7 +126,6 @@ function reformatCncCode(cncCode) {
 
     var renumbProg = [];
 
-    zeilenLoop:
     for (var i = 0; i < cncCode.length; i++) {
         var line = cncCode[i];
         if (searchProgStart(line)) {
@@ -135,7 +134,7 @@ function reformatCncCode(cncCode) {
         var result;
         if ((result = unchangeLine(line)) !== false) {
             renumbProg.push(result);
-            continue zeilenLoop;
+            continue;
         }
         if (regLineNumCom.test(line)) {
             line = line.replace(regLineNum, '');
