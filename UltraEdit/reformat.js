@@ -36,7 +36,6 @@ function main() {
     UltraEdit.activeDocument.cancelSelect();
     var orgArray = doc.split(/\r?\n/);
 
-    UltraEdit.messageBox(checkIsHex(orgArray));
     // überprüft ob es im HEX Format ist
     if (checkIsHex(orgArray)) {
         return;

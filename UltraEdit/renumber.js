@@ -16,6 +16,7 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 //============================================================
 var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
 var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
+var BRAKE = true; // bei Fehlern abbrechen -> bei Bedarf ändern
 var STATNUMMER = 1000; // Startnummer -> bei Bedarf ändern
 var INCREMENT = 5; // Inkrement -> bei Bedarf ändern
 
@@ -30,26 +31,29 @@ var FLAGS = 'i';
 // Main funktion
 //============================================================
 function main() {
+    UltraEdit.insertMode();
     UltraEdit.columnModeOff();
     UltraEdit.activeDocument.selectAll();
-    var cncCode = UltraEdit.activeDocument.selection;
+    var doc = UltraEdit.activeDocument.selection;
     UltraEdit.activeDocument.cancelSelect();
-    var orgArray = cncCode.split(/\r?\n/);
+    var orgArray = doc.split(/\r?\n/);
 
     // überprüft ob es im HEX Format ist
     if (checkIsHex(orgArray)) {
-        UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
         return;
     }
 
     // Überprüft alle Schleifen auf Vollständigkeit
-    var seq = checkIndentationSequence(orgArray);
+    var sequence = checkIndentationSequence(orgArray);
     // Überprüft ob Klammern paarweise vorkommen
-    var bec = checkBrackets(orgArray);
+    var brackets = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
-    if (seq || bec) {
-        UltraEdit.messageBox("Fehler gefunden --> Nummerierung wurde abgebrochen");
-        return;
+    if (sequence || brackets) {
+        if (BRAKE){
+            UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
+            return;
+        }
+        UltraEdit.messageBox("Fehler gefunden");
     }
 
     // Zeilen formatieren und neu nummerieren
@@ -74,8 +78,8 @@ function main() {
 //============================================================
 function checkIsHex(cncCode) {
     for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i];
-        if (/^\s*@/.test(line)) {
+        if (/^\s*@/.test(cncCode[i])) {
+            UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
             return true;
         }
     }
@@ -144,7 +148,6 @@ function renumberCncCode(cncCode) {
     var step = startNumStep[1];
     var lineNumber = startNum;
 
-    zeilenLoop:
     for (var i = 0; i < cncCode.length; i++) {
         var line = cncCode[i];
         if (searchProgStart(line)) {
@@ -154,7 +157,7 @@ function renumberCncCode(cncCode) {
         var result;
         if ((result = unchangeLine(line)) !== false) {
             renumbProg.push(result);
-            continue zeilenLoop;
+            continue;
         }
         if (regLineNumCom.test(line)) {
             line = line.replace(regLineNum, '');
@@ -250,14 +253,15 @@ function checkBrackets(cncCode) {
         for (var n = 0; n < line.length; n++) {
             if (line[n] in bracketes) {
                 stackBrackets.push(line[n]);
-            } else {
-                for (var key in bracketes) {
-                    if (bracketes[key] == line[n]) {
-                        if (stackBrackets.length == 0 || key != stackBrackets.pop()) {
-                            bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
-                            continue zeilenLoop;
-                        }
-                    }
+                continue;
+            }
+            for (var key in bracketes) {
+                if (bracketes[key] != line[n]) {
+                    continue;
+                }
+                if (stackBrackets.length == 0 || key != stackBrackets.pop()) {
+                    bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
+                    continue zeilenLoop;
                 }
             }
         }
@@ -301,30 +305,32 @@ function checkIndentationSequence(cncCode) {
             progName = getProgName(line);
         }
         line = line.replace(/;.*/, "");
-        if (!/^.*\bGOTO(F|B)?\b/i.test(line)) {
-            var firstWordMatch = line.match(/^\w*/i);
-            var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
-            if (firstWord in indentations) {
-                stackIndetation.push([firstWord, lineNumber]);
-                stackOpenClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
-            } else {
-                for (var key in indentations) {
-                    if (indentations[key] == firstWord) {
-                        stackOpenClose[key].pop();
-                        if (stackIndetation.length == 0 || stackIndetation.pop()[0] != key) {
-                            faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
-                        }
-                    }
+        if (/^.*\bGOTO(F|B)?\b/i.test(line)) {
+            continue;
+        }
+        var firstWordMatch = line.match(/^\w*/i);
+        var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
+        if (firstWord in indentations) {
+            stackIndetation.push([firstWord, lineNumber]);
+            stackOpenClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
+        } else {
+            for (var key in indentations) {
+                if (indentations[key] != firstWord) {
+                    continue;
+                }
+                stackOpenClose[key].pop();
+                if (stackIndetation.length == 0 || stackIndetation.pop()[0] != key) {
+                    faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
                 }
             }
-            if (firstWord == 'ELSE') {
-                if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1][0] != 'IF' ||
-                    lastIf[lastIf.length - 1] == stackIndetation[stackIndetation.length - 1][1]
-                ) {
-                    faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
-                } else {
-                    lastIf.push(stackIndetation[stackIndetation.length - 1][1]);
-                }
+        }
+        if (firstWord == 'ELSE') {
+            if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1][0] != 'IF' ||
+                lastIf[lastIf.length - 1] == stackIndetation[stackIndetation.length - 1][1]
+            ) {
+                faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+            } else {
+                lastIf.push(stackIndetation[stackIndetation.length - 1][1]);
             }
         }
     }
