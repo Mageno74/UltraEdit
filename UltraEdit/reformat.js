@@ -42,11 +42,11 @@ function main() {
     }
 
     // Überprüft alle Schleifen auf Vollständigkeit
-    var sequence  = checkIndentationSequence(orgArray);
+    var sequence = checkIndentationSequence(orgArray);
     // Überprüft ob Klammern paarweise vorkommen
-    var bracket = checkBrackets(orgArray);
+    var brackets = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
-    if (sequence || bracket) {
+    if (sequence || brackets) {
         if (BRAKE){
             UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
             return;

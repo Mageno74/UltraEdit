@@ -16,6 +16,7 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 //============================================================
 var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
 var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
+var BRAKE = true; // bei Fehlern abbrechen -> bei Bedarf ändern
 var STATNUMMER = 1000; // Startnummer -> bei Bedarf ändern
 var INCREMENT = 5; // Inkrement -> bei Bedarf ändern
 var BRAKE = true; // bricht die Formatierung ab wenn ein Fehler gefunden wurde
@@ -43,11 +44,11 @@ function main() {
     }
 
     // Überprüft alle Schleifen auf Vollständigkeit
-    var sequence  = checkIndentationSequence(orgArray);
+    var sequence = checkIndentationSequence(orgArray);
     // Überprüft ob Klammern paarweise vorkommen
-    var bracket = checkBrackets(orgArray);
+    var brackets = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
-    if (sequence || bracket) {
+    if (sequence || brackets) {
         if (BRAKE){
             UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
             return;
