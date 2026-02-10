@@ -126,7 +126,7 @@ function reformatCncCode(cncCode) {
     var renumbProg = [];
 
     for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i];
+        var line = cncCode[i].trim();
         if (searchProgStart(line)) {
             count = 0;
         }
