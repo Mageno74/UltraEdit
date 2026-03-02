@@ -343,50 +343,6 @@ function checkIndentationSequence(cncCode) {
 }
 
 //============================================================
-// Überprüft ob GROUP_BEGIN/GROUP_END paarweise vorkommen
-//============================================================
-function checkGroup(cncCode) {
-    var groupFault = [];
-    var stackGroup = [];
-    var group = { 'GROUP_BEGIN': 'GROUP_END' };
-
-    var progName = getProgName(cncCode[0]);
-
-    for (var i = 0; i < cncCode.length; i++) {
-        var lineNumber = i + 1;
-        var line = removeString(cncCode[i]);
-
-        if (NEUPROG.test(line)) {
-            if (groupFault.length != 0) {
-                break;
-            }
-            progName = getProgName(line);
-        }
-        var firstWordMatch = line.match(/^GROUP_(BEGIN|END)/i);
-        var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
-        var groupNumber = line.match(/^GROUP_(BEGIN|END)\s*(\s*\d+)/i)[2] || "";
-        if (firstWord in group) {
-            stackGroup.push(groupNumber);
-            continue;
-        } else {
-            for (var key in group) {
-                if (group[key] != firstWord) {
-                    continue;
-                }
-                if (stackGroup.length == 0 || groupNumber != stackGroup.pop()) {
-                    groupFault.push(['GROUP', lineNumber, 'nicht geöffnet']);
-                }
-            }
-        }
-    }
-    if (stackGroup.length != 0) {
-        groupFault.push(['GROUP', lineNumber, 'nicht geschlossen']);
-    }
-    return printFaults(progName, groupFault);
-}
-
-
-//============================================================
 // Fehlerausgabe im Ausgabefenster
 //============================================================
 function printFaults(progamName, allFaults) {
