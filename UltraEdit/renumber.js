@@ -49,7 +49,7 @@ function main() {
     var brackets = checkBrackets(orgArray);
     // wenn ein Fehler gefunden wird, wird abgebrochen
     if (sequence || brackets) {
-        if (BRAKE){
+        if (BRAKE) {
             UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
             return;
         }
@@ -90,7 +90,7 @@ function checkIsHex(cncCode) {
 // Eingabe von Startnummer und Schritt
 //============================================================
 function getStartNumber() {
-    var startNumber = parseInt(UltraEdit.getValue("Startnummer (Standard=" + STATNUMMER +")", 1), 10);
+    var startNumber = parseInt(UltraEdit.getValue("Startnummer (Standard=" + STATNUMMER + ")", 1), 10);
     var increment = parseInt(UltraEdit.getValue("Increment (Standard=" + INCREMENT + ")", 1), 10);
 
     if (isNaN(startNumber) || startNumber > 999999 || startNumber < 1) {
@@ -341,6 +341,50 @@ function checkIndentationSequence(cncCode) {
     }
     return printFaults(progName, faultArray);
 }
+
+//============================================================
+// Überprüft ob GROUP_BEGIN/GROUP_END paarweise vorkommen
+//============================================================
+function checkGroup(cncCode) {
+    var groupFault = [];
+    var stackGroup = [];
+    var group = { 'GROUP_BEGIN': 'GROUP_END' };
+
+    var progName = getProgName(cncCode[0]);
+
+    for (var i = 0; i < cncCode.length; i++) {
+        var lineNumber = i + 1;
+        var line = removeString(cncCode[i]);
+
+        if (NEUPROG.test(line)) {
+            if (groupFault.length != 0) {
+                break;
+            }
+            progName = getProgName(line);
+        }
+        var firstWordMatch = line.match(/^GROUP_(BEGIN|END)/i);
+        var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
+        var groupNumber = line.match(/^GROUP_(BEGIN|END)\s*(\s*\d+)/i)[2] || "";
+        if (firstWord in group) {
+            stackGroup.push(groupNumber);
+            continue;
+        } else {
+            for (var key in group) {
+                if (group[key] != firstWord) {
+                    continue;
+                }
+                if (stackGroup.length == 0 || groupNumber != stackGroup.pop()) {
+                    groupFault.push(['GROUP', lineNumber, 'nicht geöffnet']);
+                }
+            }
+        }
+    }
+    if (stackGroup.length != 0) {
+        groupFault.push(['GROUP', lineNumber, 'nicht geschlossen']);
+    }
+    return printFaults(progName, groupFault);
+}
+
 
 //============================================================
 // Fehlerausgabe im Ausgabefenster
