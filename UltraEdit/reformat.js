@@ -16,7 +16,7 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 //============================================================
 var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
 var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
-var BRAKE = true; // bricht die Formatierung ab wenn ein Fehler gefunden wurde
+var BRAKE = true; // bricht die Formatierung ab wenn ein Fehler gefunden wurde  -> bei Bedarf ändern
 
 //============================================================
 // Reguläre Ausdrücke
