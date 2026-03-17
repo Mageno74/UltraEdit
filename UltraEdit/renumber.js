@@ -16,7 +16,6 @@ Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise
 //============================================================
 var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
 var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
-
 var STATNUMMER = 1000; // Startnummer -> bei Bedarf ändern
 var INCREMENT = 5; // Inkrement -> bei Bedarf ändern
 //============================================================
@@ -145,7 +144,7 @@ function renumberCncCode(cncCode) {
     var lineNumber = startNum;
 
     for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i];
+        var line = cncCode[i].trim();
         if (searchProgStart(line)) {
             lineNumber = startNum;
             count = 0;
