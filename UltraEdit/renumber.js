@@ -112,7 +112,7 @@ function indentations() {
 // sucht nach Zeilen die nicht verändert werden sollen
 //============================================================
 function unchangeLine(oneLine) {
-    if (NEUPROG.test(oneLine) || /^\s*;/.test(oneLine) || /^$/.test(oneLine)) {
+    if (regex.noNcCode.test(oneLine)) {
         oneLine = oneLine.trim();
         return oneLine;
     }
@@ -123,8 +123,29 @@ function unchangeLine(oneLine) {
 // Sucht Programmanfang
 //============================================================
 function searchProgStart(oneLine) {
-    return NEUPROG.test(oneLine);
+    return regex.newProgram.test(oneLine);
 }
+
+function lineDitc(line) {
+    return {
+            lineNum: '',
+            code: '',
+            comment: '',
+            deleteSting: '',
+            emptyLines: 0
+    };
+}
+
+function parseLine(line, lineData) {
+    if (line) {
+        lineData.lineNum = /(^N\d+)/i.exec(line)?.[1] ?? '';
+        lineData.code = line.replace(/(^N\d+)/i, '')
+            .replace(/\s*;.*/i, '');
+        lineData.comment = /(\s*;.*)/.exec(line)?.[1] ?? '';
+    }
+    return lineData;
+}
+
 
 //============================================================
 // Formatiert den CNC Code 
@@ -132,51 +153,50 @@ function searchProgStart(oneLine) {
 function renumberCncCode(cncCode) {
     var tab = indentations();
     var count = 0;
-    var regLineNum = new RegExp(ZEILENNUMMER, FLAGS);
-    var regLineNumCom = new RegExp(ZEILENNUMMER + ';', FLAGS);
-    var regOnlyLineNum = new RegExp(ZEILENNUMMER + '(\\s|$)', FLAGS);
-
+    //var regex = new RegexDictionary();
     var renumbProg = [];
 
     var startNumStep = getStartNumber();
     var startNum = startNumStep[0];
     var step = startNumStep[1];
     var lineNumber = startNum;
+    var lineData = lineDitc();
 
     for (var i = 0; i < cncCode.length; i++) {
         var line = cncCode[i].trim();
-        if (searchProgStart(line)) {
+        parseLine(line, lineData);
+        if (searchProgStart(lineData.co)) {
             lineNumber = startNum;
             count = 0;
         }
-        var result;
-        if ((result = unchangeLine(line)) !== false) {
+        var result = unchangeLine(line);
+        if ((result) !== false) {
             renumbProg.push(result);
             continue;
         }
-        if (regLineNumCom.test(line)) {
-            line = line.replace(regLineNum, '');
-        } else {
-            line = line.replace(regOnlyLineNum, '').trim();
-            if (/^\s*\b(ENDIF|ELSE|ENDWHILE|ENDLOOP|ENDFOR)\b/i.test(line) && count > 0) {
+        line = line.replace(regex.lineNumer, '');
+        if (lineData.lineNum && (lineData.code || lineData.comment)) {
+            line = line.trim();
+            if (regex.closeInstruction.test(line) && count > 0) {
                 count--;
             }
             var space = ' ';
             for (var n = 0; n < count; n++) {
                 space += tab;
             }
-            if (!/^$/.test(line)) {
+            if (!regex.noNcCode.test(line)) {
                 line = space + line;
             }
-            if ((/^\s*\b(IF|ELSE|WHILE|LOOP|FOR)\b/i.test(line) && !/^.*\bGOTO(F|B)?\b/i.test(line))) {
+            if ((regex.openInstruction.test(line.trim()) && !regex.gotoInstruction.test(line.trim()))) {
                 count++;
             }
         }
-        if (!/^$/.test(line)) {
+        if (line.trim()) {
             line = 'N' + lineNumber + line;
             renumbProg.push(line);
             lineNumber += step;
         }
+        renumbProg.push(line);
     }
     return renumbProg;
 }
@@ -214,8 +234,8 @@ function removeString(oneLine) {
 //============================================================
 function getProgName(oneRow) {
     var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
-    if (NEUPROG.test(oneRow)) {
-        progName = oneRow.replace(NEUPROG, "");
+    if (regex.newProgram.test(oneRow)) {
+        progName = oneRow.replace(regex.newProgram, "");
     }
     return progName;
 }
@@ -239,7 +259,7 @@ function checkBrackets(cncCode) {
         var lineNumber = i + 1;
         var line = removeString(cncCode[i]);
 
-        if (NEUPROG.test(line)) {
+        if (regex.newProgram.test(line)) {
             if (bracketFault.length != 0) {
                 break;
             }
@@ -267,26 +287,79 @@ function checkBrackets(cncCode) {
     return printFaults(progName, bracketFault);
 }
 
+function initializeStack() {
+    return {
+        sequence: [],
+        errorMessage: [],
+        group: [],
+        sequenceGroup: [],
+        lastIf: [],
+        openClose: {
+            IF: [],
+            WHILE: [],
+            LOOP: [],
+            FOR: [],
+            GROUP_BEGIN: [],
+            REPEAT: [],
+        },
+    };
+}
+
+class RegexDictionary {
+    lineNumer = /^\s*N\d+/i;
+    comment = /;.*/;
+    noNcCode = /^\s*(;|%|$)/;
+    newProgram = /^%/;
+    string = /"[^"]*"/g;
+    instruction = /^(\w*)\s*\(?\s*(\d+)?(.*)/i;
+    closeInstruction = /^\b(ENDIF|ENDWHILE|ELSE|ENDLOOP|ENDFOR|UNTIL)\b/i;
+    openInstruction = /^\b(IF|WHILE|ELSE|LOOP|FOR|REPEAT$)\b/i;
+    gotoInstruction = /^.*\b(GOTO(F|B)?)\b/i;
+}
+var regex = new RegexDictionary();
+
+
+function handleElse(firstWord, lineNumber, stack) {
+    if (stack.sequence.length == 0 || stack.sequence[stack.sequence.length - 1][0] != 'IF' ||
+        stack.lastIf[stack.lastIf.length - 1] == stack.sequence[stack.sequence.length - 1][1]
+    ) {
+        stack.errorMessage.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+    } else {
+        stack.lastIf.push(stack.sequence[stack.sequence.length - 1][1]);
+    }
+}
+
+// Funktion zur Behandlung von GROUP_BEGIN
+function handleGroupBegin(firstWord, groupID, groupName, lineNumber, stack) {
+    if (stack.sequenceGroup.includes(groupID)) {
+        stack.errorMessage.push([firstWord, lineNumber, `GROUP_BEGIN(${groupID}${groupName}) hat bereits eine offene Gruppe`]);
+    }
+    stack.group.push([`GROUP_BEGIN(${groupID}${groupName})`, lineNumber, 'nicht geschlossen']);
+    stack.sequenceGroup.push(groupID);
+}
+
+// Funktion zur Behandlung von GROUP_END
+function handleGroupEnd(firstWord, groupID, groupName, lineNumber, stack) {
+    if (stack.sequenceGroup.length === 0 || groupID !== stack.sequenceGroup[stack.sequenceGroup.length - 1]) {
+        stack.errorMessage.push([firstWord, lineNumber, `GROUP_END(${groupID}${groupName}) in falscher Reihenfolge`]);
+    }
+    stack.sequenceGroup.pop();
+    stack.group.pop();
+}
+
 //============================================================
 // Überprüft ob Anweisungen paarweise vorkommen
 //============================================================
 function checkIndentationSequence(cncCode) {
-    var faultArray = [];
-    var stackIndetation = [];
-    var lastIf = [];
-    var stackOpenClose = {
-        'IF': [],
-        'WHILE': [],
-        'LOOP': [],
-        'FOR': [],
-        'GROUP_BEGIN': []
-    };
-    var indentations = {
+    var stack = initializeStack();
+    //var regex = new RegexDictionary();
+    var instruction = {
         'IF': 'ENDIF',
         'WHILE': 'ENDWHILE',
         'LOOP': 'ENDLOOP',
         'FOR': 'ENDFOR',
-        'GROUP_BEGIN': 'GROUP_END'
+        'GROUP_BEGIN': 'GROUP_END',
+        'REPEAT': 'UNTIL'
     };
 
     var progName = getProgName(cncCode[0]);
@@ -295,58 +368,92 @@ function checkIndentationSequence(cncCode) {
         var lineNumber = i + 1;
         var line = cncCode[i].replace(/^\s*(N\d+\s*)?/, "");
 
-        if (NEUPROG.test(line)) {
-            if (stackIndetation.length != 0 || faultArray.length != 0) {
+        if (regex.newProgram.test(line)) {
+            if (stack.sequence.length != 0 || stack.errorMessage.length != 0) {
                 break;
             }
             progName = getProgName(line);
         }
-        line = line.replace(/;.*/, "");
-        if (/^.*\bGOTO(F|B)?\b/i.test(line)) {
+        var cleanedLine = line.replace(regex.comment, "");
+
+        // Regex-Matching
+        var match = cleanedLine.match(regex.instruction);
+
+        // Frühzeitiges Beenden bei GOTO-Instruktionen
+        if (regex.gotoInstruction.test(cleanedLine)) {
             continue;
         }
-        var firstWordMatch = line.match(/^\w*/i);
-        var firstWord = firstWordMatch ? firstWordMatch[0].toUpperCase() : "";
-        if (firstWord in indentations) {
-            stackIndetation.push([firstWord, lineNumber]);
-            stackOpenClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
+
+        // Frühzeitiges Beenden bei REPEAT mit zusätzlichem Inhalt
+        if (match && match[1].toUpperCase() === 'REPEAT' && match[3] !== '') {
+            continue;
+        }
+        // Überprüfung auf gültige Instruktionen
+        var firstWord = "";
+        if (match) {
+            firstWord = match[1].toUpperCase();
+            var groupID = match[2] || '';
+            var groupName = match[3] || '';
+
+        }
+        if (!instruction[firstWord] && !Object.values(instruction).includes(firstWord) && firstWord !== 'ELSE') {
+            continue
+        }
+
+        if (firstWord in instruction) {
+            stack.sequence.push([firstWord, lineNumber]);
+            stack.openClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
         } else {
-            for (var key in indentations) {
-                if (indentations[key] != firstWord) {
+            for (var key in instruction) {
+                if (instruction[key] != firstWord) {
                     continue;
                 }
-                stackOpenClose[key].pop();
-                if (stackIndetation.length == 0 || stackIndetation.pop()[0] != key) {
-                    faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+                stack.openClose[key].pop();
+                if (stack.sequence.length == 0 || stack.sequence.pop()[0] != key) {
+                    stack.errorMessage.push([firstWord, lineNumber, 'falsche Reihenfolge']);
                 }
             }
         }
         if (firstWord == 'ELSE') {
-            if (stackIndetation.length == 0 || stackIndetation[stackIndetation.length - 1][0] != 'IF' ||
-                lastIf[lastIf.length - 1] == stackIndetation[stackIndetation.length - 1][1]
-            ) {
-                faultArray.push([firstWord, lineNumber, 'falsche Reihenfolge']);
-            } else {
-                lastIf.push(stackIndetation[stackIndetation.length - 1][1]);
-            }
+            handleElse(firstWord, lineNumber, stack);
+            continue;
+        }
+        if (firstWord == 'GROUP_BEGIN') {
+            handleGroupBegin(firstWord, groupID, groupName, lineNumber, stack);
+            continue;
+        }
+        if (firstWord == 'GROUP_END') {
+            handleGroupEnd(firstWord, groupID, groupName, lineNumber, stack);
         }
     }
-    for (var key in stackOpenClose) {
-        for (var i = 0; i < stackOpenClose[key].length; i++) {
-            faultArray.push(stackOpenClose[key][i]);
+    for (var key in stack.openClose) {
+        for (var i = 0; i < stack.openClose[key].length; i++) {
+            stack.errorMessage.push(stack.openClose[key][i]);
         }
     }
-    return printFaults(progName, faultArray);
+    return printFaults(progName, stack.errorMessage);
 }
+
+
+function initializeError(){
+    return {
+        progName: '',
+        lineNum: '',
+        group: '',
+        message: ''
+    };
+}
+
+
 
 //============================================================
 // Fehlerausgabe im Ausgabefenster
 //============================================================
-function printFaults(progamName, allFaults) {
+function printFaults(progamName, errorMessage) {
     var isFault = false;
-    for (var i = 0; i < allFaults.length; i++) {
-        UltraEdit.outputWindow.write("Im Programm >> " + progamName + " >> " + allFaults[i][0] + " << " + allFaults[i][2] + " ==> Zeile " + allFaults[i][1]);
-        printOneFault(allFaults[i]);
+    for (var i = 0; i < errorMessage.length; i++) {
+        UltraEdit.outputWindow.write(`Im Programm >> ${progamName} >> ${errorMessage[i][0]} << ${errorMessage[i][2]} ==> Zeile ${errorMessage[i][1]}`);
+        printOneFault(errorMessage[i]);
         UltraEdit.outputWindow.showWindow(true);
         isFault = true;
     }
@@ -356,9 +463,9 @@ function printFaults(progamName, allFaults) {
 //============================================================
 // Fehlerausgabe mit Zeilennummer als Link
 //============================================================
-function printOneFault(faults) {
+function printOneFault(message) {
     var pathDoc = unescape(encodeURIComponent(UltraEdit.activeDocument.path));
-    UltraEdit.outputWindow.write(pathDoc + "(" + faults[1] + "): ");
+    UltraEdit.outputWindow.write(`${pathDoc} (${message[1]}):`);
     UltraEdit.outputWindow.write("======================================================================");
 }
 
