@@ -1,16 +1,3 @@
-/*
-auch MultiArchive möglich
-es werden alle Zeilen nummeriert die nicht leer sind, nicht mit einem
-";" oder mit "%" beginnen.
-bei Zeilen in denen nur eine Zeilennummer ist, aber sonst leer ist. Wird die
-Zeilennummer gelöscht.
-Leerzeichen am Zeilenende werden entfernt.
-Nach der Zeilennummer werden alle Leerzeichen bis auf eins entfernt.
-Mehr als eine Leerzeile wird entfernt
-Einrückung reformatieren bei IF, While und LOOP.
-Es wird überprüft ob IF/ENDIF, WHILE/ENDWHILE und LOOP/ENDLOOP immer paarweise vorkommen.
-*/
-
 //============================================================
 // Variablen 
 //============================================================
@@ -18,88 +5,80 @@ var EINRUECKUNG = 2; // Einrückung für IF oder WHILE -> bei Bedarf ändern
 var LEEREZEILEN = 1; // maximale Anzahl der leeren Zeilen -> bei Bedarf ändern
 var STATNUMMER = 1000; // Startnummer -> bei Bedarf ändern
 var INCREMENT = 5; // Inkrement -> bei Bedarf ändern
+var regex = initializeRegex();
 //============================================================
-// Reguläre Ausdrücke
-//============================================================
-var ZEILENNUMMER = '^\\s*N\\d+';
-var NEUPROG = /^\s*%_N_/;
-var FLAGS = 'i';
 
-//============================================================
-// Main funktion
-//============================================================
 function main() {
+    var stack = initializeStack();
+    var lineData = initializeLineDitc();
+    var doc = readDoc();
+
+    var newDoc = prozessDoc(doc, stack, lineData);
+    if (stack.errorMessage.length == 0) {
+        if (UltraEdit.activeDocument){
+            writeDoc(newDoc);
+            UltraEdit.messageBox('erfolgreich nummeriert');
+        }else{
+            console.log(doc);
+            createMessage('erfolgreich nummeriert');
+        }
+    } else {
+        if (UltraEdit.activeDocument){
+            printFaults(lineData.progName, stack.errorMessage);
+            UltraEdit.messageBox('Fehler gefunden -> abgebrochen');
+        }else{
+            for (var i = 0; i < stack.errorMessage.length; i++) {
+                createMessage('Error = ' + stack.errorMessage[i]);
+            }
+            createMessage('Fehler gefunden -> abgrbrochen');
+        }
+    }
+}
+
+function readDoc() {
     UltraEdit.insertMode();
     UltraEdit.columnModeOff();
+    UltraEdit.outputWindow.clear();
     UltraEdit.activeDocument.selectAll();
     var doc = UltraEdit.activeDocument.selection;
     UltraEdit.activeDocument.cancelSelect();
-    var orgArray = doc.split(/\r?\n/);
+    return doc.split(regex.lineEnd);
+}
 
-    // überprüft ob es im HEX Format ist
-    if (checkIsHex(orgArray)) {
-        return;
-    }
-
-    // Überprüft alle Schleifen auf Vollständigkeit
-    var sequence = checkIndentationSequence(orgArray);
-    // Überprüft ob Klammern paarweise vorkommen
-    var brackets = checkBrackets(orgArray);
-    // wenn ein Fehler gefunden wird, wird abgebrochen
-    if (sequence || brackets) {
-        UltraEdit.messageBox("Fehler gefunden --> Formatierung wurde abgebrochen");
-        return;
-    }
-
-    // Zeilen formatieren und neu nummerieren
-    var reNumbArray = renumberCncCode(orgArray);
-
-    // Löscht alle leeren Zeilen bis auf eine
-    var noEptLinArray = deleteEmptyLines(reNumbArray);
-
-    // Verbindet die einzelnen Zeilen wieder
-    var newArray = noEptLinArray.join('\r\n');
-
-    // Überschreibt das Original
+function writeDoc(doc) {
+    var newDoc = doc.join('\r\n');
     UltraEdit.activeDocument.selectAll();
-    UltraEdit.activeDocument.write(newArray + '\r\n');
+    UltraEdit.activeDocument.write(newDoc + '\r\n');
     UltraEdit.activeDocument.cancelSelect();
-
-    UltraEdit.messageBox("nummeriert und formatiert");
 }
 
-//============================================================
-// kontrolliert ob eine Datei im HEX Format ist
-//============================================================
-function checkIsHex(cncCode) {
-    for (var i = 0; i < cncCode.length; i++) {
-        if (/^\s*@/.test(cncCode[i])) {
-            UltraEdit.messageBox("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
-            return true;
-        }
-    }
-    return false;
+function initializeRegex() {
+    return {
+        lineNumer: /^\s*N\d+/i,
+        comment: /;.*/,
+        noNcCode: /^\s*(;|%|$)/,
+        newProgram: /^%_N_/,
+        string: /"[^"]*"/g,
+        instruction: /^(\w*)\s*\(?\s*(\d+)?(.*)/i,
+        closeInstruction: /^\b(ENDIF|ENDWHILE|ELSE|ENDLOOP|ENDFOR|UNTIL)\b/i,
+        openInstruction: /^\b(IF|WHILE|ELSE|LOOP|FOR|REPEAT$)\b/i,
+        gotoInstruction: /^.*\b(GOTO(F|B)?)\b/i,
+        isHex: /^\s*@/,
+        lineEnd: /\r?\n/
+    };
 }
 
-//============================================================
-// Eingabe von Startnummer und Schritt
-//============================================================
-function getStartNumber() {
-    var startNumber = parseInt(UltraEdit.getValue("Startnummer (Standard=" + STATNUMMER + ")", 1), 10);
-    var increment = parseInt(UltraEdit.getValue("Increment (Standard=" + INCREMENT + ")", 1), 10);
-
-    if (isNaN(startNumber) || startNumber > 999999 || startNumber < 1) {
-        startNumber = STATNUMMER;
-    }
-    if (isNaN(increment) || increment > 9999 || increment < 1) {
-        increment = INCREMENT;
-    }
-    return [startNumber, increment];
+function initializeInstruction() {
+    return {
+        'IF': 'ENDIF',
+        'WHILE': 'ENDWHILE',
+        'LOOP': 'ENDLOOP',
+        'FOR': 'ENDFOR',
+        'GROUP_BEGIN': 'GROUP_END',
+        'REPEAT': 'UNTIL'
+    };
 }
 
-//============================================================
-// Standardeinrückung festlegen
-//============================================================
 function indentations() {
     var tabSize = '';
     for (var i = 0; i < EINRUECKUNG; i++) {
@@ -108,183 +87,86 @@ function indentations() {
     return tabSize;
 }
 
-//============================================================
-// sucht nach Zeilen die nicht verändert werden sollen
-//============================================================
-function unchangeLine(oneLine) {
-    if (regex.noNcCode.test(oneLine)) {
-        oneLine = oneLine.trim();
-        return oneLine;
+function prozessDoc(doc, stack, lineData) {
+    var setting = getStartNumber();
+    var instruction = initializeInstruction();
+    var tab = indentations();
+    var newDoc = [];
+
+    lineData.lineNum = setting.start;
+
+    for (var i = 0; i < doc.length; i++) {
+        var line = doc[i];
+        lineData.docLineNum = i + 1;
+        if (checkIsHex(line)) {
+            return false;
+        }
+        createMessage('name ' + lineData.progName)
+        if (getProgName(lineData, setting, stack)){
+            return newDoc;
+        }
+        prozessLine(line, lineData, stack, instruction);
+        renumberDoc(line, lineData, newDoc, setting, tab);
+    }
+    for (var key in stack.openClose) {
+        for (var i = 0; i < stack.openClose[key].length; i++) {
+            stack.errorMessage.push(stack.openClose[key][i]);
+        }
+    }
+
+    return newDoc;
+}
+
+function deleteEmptyLines(line, lineData, newDoc) {
+    if (line.trim() == '') {
+        lineData.emptyLines++;
+    } else {
+        lineData.emptyLines = 0;
+    }
+    if (lineData.emptyLines <= LEEREZEILEN) {
+        newDoc.push(line);
+    }
+}
+
+function checkIsHex(line) {
+    if (regex.isHex.test(line)) {
+        createMessage("Datei im HEX Format kann nicht nummeriert oder formatiert werden");
+        return true;
     }
     return false;
 }
 
-//============================================================
-// Sucht Programmanfang
-//============================================================
-function searchProgStart(oneLine) {
-    return regex.newProgram.test(oneLine);
+function createMessage(message) {
+    if (UltraEdit.activeDocument) {
+        UltraEdit.outputWindow.write(message);
+    } else {
+        console.log(message);
+    }
 }
 
-function lineDitc(line) {
-    return {
-            lineNum: '',
-            code: '',
-            comment: '',
-            deleteSting: '',
-            emptyLines: 0
-    };
+function getStartNumber() {
+    if (UltraEdit.activeDocument) {
+        var startNumber = parseInt(UltraEdit.getValue("Startnummer (Standard=" + STATNUMMER + ")", 1), 10);
+        var increment = parseInt(UltraEdit.getValue("Increment (Standard=" + INCREMENT + ")", 1), 10);
+    } else {
+        var startNumber = 1000;
+        var increment = 5;
+    }
+
+    if (isNaN(startNumber) || startNumber > 999999 || startNumber < 1) {
+        startNumber = STATNUMMER;
+    }
+    if (isNaN(increment) || increment > 9999 || increment < 1) {
+        increment = INCREMENT;
+    }
+    return { 'start': startNumber, 'inc': increment };
 }
 
 function parseLine(line, lineData) {
-    if (line) {
-        lineData.lineNum = /(^N\d+)/i.exec(line)?.[1] ?? '';
-        lineData.code = line.replace(/(^N\d+)/i, '')
-            .replace(/\s*;.*/i, '');
-        lineData.comment = /(\s*;.*)/.exec(line)?.[1] ?? '';
-    }
-    return lineData;
-}
-
-
-//============================================================
-// Formatiert den CNC Code 
-//============================================================
-function renumberCncCode(cncCode) {
-    var tab = indentations();
-    var count = 0;
-    //var regex = new RegexDictionary();
-    var renumbProg = [];
-
-    var startNumStep = getStartNumber();
-    var startNum = startNumStep[0];
-    var step = startNumStep[1];
-    var lineNumber = startNum;
-    var lineData = lineDitc();
-
-    for (var i = 0; i < cncCode.length; i++) {
-        var line = cncCode[i].trim();
-        parseLine(line, lineData);
-        if (searchProgStart(lineData.co)) {
-            lineNumber = startNum;
-            count = 0;
-        }
-        var result = unchangeLine(line);
-        if ((result) !== false) {
-            renumbProg.push(result);
-            continue;
-        }
-        line = line.replace(regex.lineNumer, '');
-        if (lineData.lineNum && (lineData.code || lineData.comment)) {
-            line = line.trim();
-            if (regex.closeInstruction.test(line) && count > 0) {
-                count--;
-            }
-            var space = ' ';
-            for (var n = 0; n < count; n++) {
-                space += tab;
-            }
-            if (!regex.noNcCode.test(line)) {
-                line = space + line;
-            }
-            if ((regex.openInstruction.test(line.trim()) && !regex.gotoInstruction.test(line.trim()))) {
-                count++;
-            }
-        }
-        if (line.trim()) {
-            line = 'N' + lineNumber + line;
-            renumbProg.push(line);
-            lineNumber += step;
-        }
-        renumbProg.push(line);
-    }
-    return renumbProg;
-}
-
-//============================================================
-// Löscht alle leeren Zeilen bis auf eine
-//============================================================
-function deleteEmptyLines(cncCode) {
-    var result = [];
-    var countEmptyLine = 0;
-    for (var i = 0; i < cncCode.length; i++) {
-        if (cncCode[i].trim() == '') {
-            countEmptyLine++;
-        } else {
-            countEmptyLine = 0;
-        }
-        if (countEmptyLine <= LEEREZEILEN) {
-            result.push(cncCode[i]);
-        }
-    }
-    return result;
-}
-
-//============================================================
-// Entfernt Strings und Kommentare
-//============================================================
-function removeString(oneLine) {
-    var line = oneLine.replace(/"[^"]*"/g, "");
-    line = line.replace(/;.*/, "");
-    return line;
-}
-
-//============================================================
-// gibt den Programmname zurück
-//============================================================
-function getProgName(oneRow) {
-    var progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
-    if (regex.newProgram.test(oneRow)) {
-        progName = oneRow.replace(regex.newProgram, "");
-    }
-    return progName;
-}
-
-//============================================================
-// Überprüft ob Klammern paarweise vorkommen
-//============================================================
-function checkBrackets(cncCode) {
-    var bracketFault = [];
-    var bracketes = {
-        '(': ')',
-        '{': '}',
-        '[': ']'
-    };
-
-    var progName = getProgName(cncCode[0]);
-
-    zeilenLoop:
-    for (var i = 0; i < cncCode.length; i++) {
-        var stackBrackets = [];
-        var lineNumber = i + 1;
-        var line = removeString(cncCode[i]);
-
-        if (regex.newProgram.test(line)) {
-            if (bracketFault.length != 0) {
-                break;
-            }
-            progName = getProgName(line);
-        }
-        for (var n = 0; n < line.length; n++) {
-            if (line[n] in bracketes) {
-                stackBrackets.push(line[n]);
-                continue;
-            }
-            for (var key in bracketes) {
-                if (bracketes[key] != line[n]) {
-                    continue;
-                }
-                if (stackBrackets.length == 0 || key != stackBrackets.pop()) {
-                    bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
-                    continue zeilenLoop;
-                }
-            }
-        }
-        if (stackBrackets.length != 0) {
-            bracketFault.push(['Klammer', lineNumber, 'nicht geschlossen']);
-        }
-    }
-    return printFaults(progName, bracketFault);
+    lineData.orgNum = regex.lineNumer.exec(line);
+    lineData.code = line.replace(regex.lineNumer, '')
+        .replace(regex.comment, '');
+    lineData.comment = regex.comment.exec(line);
 }
 
 function initializeStack() {
@@ -305,172 +187,225 @@ function initializeStack() {
     };
 }
 
-class RegexDictionary {
-    lineNumer = /^\s*N\d+/i;
-    comment = /;.*/;
-    noNcCode = /^\s*(;|%|$)/;
-    newProgram = /^%/;
-    string = /"[^"]*"/g;
-    instruction = /^(\w*)\s*\(?\s*(\d+)?(.*)/i;
-    closeInstruction = /^\b(ENDIF|ENDWHILE|ELSE|ENDLOOP|ENDFOR|UNTIL)\b/i;
-    openInstruction = /^\b(IF|WHILE|ELSE|LOOP|FOR|REPEAT$)\b/i;
-    gotoInstruction = /^.*\b(GOTO(F|B)?)\b/i;
+function initializeLineDitc() {
+    return {
+        orgNum: '',
+        code: '',
+        comment: '',
+        emptyLines: 0,
+        progName: '',
+        indentLevel: 0,
+        lineNum: 0,
+        docLineNum: 0
+    };
 }
-var regex = new RegexDictionary();
+
+function prozessLine(line, lineData, stack, instruction, newDoc) {
+    parseLine(line, lineData);
+    checkBrackets(lineData, stack);
+    var resault = checkIsInstruction(lineData.code, instruction);
+    if (resault) {
+        checkIndentationSequence(resault, stack, instruction, lineData.docLineNum);
+    }
+}
+
+function getProgName(lineData, setting, stack) {
+    if (!lineData.progName) {
+        if (UltraEdit.activeDocument) {
+            lineData.progName = UltraEdit.activeDocument.path.replace(/.*\\/, "");
+        } else {
+            lineData.progName = 'unbekanntes Dokument';
+        }
+    }
+    if (regex.newProgram.test(lineData.code)) {
+        lineData.progName = lineData.code.replace(regex.newProgram, '');
+        lineData.lineNum = setting.start;
+        for (var key in stack.openClose) {
+            for (var i = 0; i < stack.openClose[key].length; i++) {
+                stack.errorMessage.push(stack.openClose[key][i]);
+            }
+        }
+        if(stack.errorMessage.length != 0){
+            return true;
+        }
+    }
+    return false;
+}
+
+function checkIsInstruction(line, instruction) {
+    var match = line.trim().match(regex.instruction);
+
+    // Frühzeitiges Beenden bei GOTO-Instruktionen
+    if (regex.gotoInstruction.test(line)) {
+        return null;
+    }
+    // Frühzeitiges Beenden bei REPEAT
+    if (match && match[1].toUpperCase() == 'REPEAT' && match[3] != '') {
+        return null;
+    }
+    // Überprüfung auf gültige Instruktionen
+    if (match) {
+        var group_1 = match[1].toUpperCase() || '';
+        var group_2 = match[2] || '';
+        var group_3 = match[3] || '';
+    }
+    var instList = [];
+    for (var key in instruction) {
+        instList.push(instruction[key]);
+    }
+    if ((group_1 in instruction) || (instList.indexOf(group_1) != -1) || (group_1 == 'ELSE')) {
+        return { firstWord: group_1, groupID: group_2, groupName: group_3 };
+    }
+    return null
+}
+
+function checkIndentationSequence(resault, stack, instruction, docLineNumber) {
+    var firstWord = resault.firstWord;
+    var groupID = resault.groupID;
+    var groupName = resault.groupName;
+
+    if (firstWord in instruction) {
+        stack.sequence.push([firstWord, docLineNumber]);
+        stack.openClose[firstWord].push([firstWord, docLineNumber, 'nicht geschlossen']);
+    } else {
+        for (var key in instruction) {
+            if (instruction[key] != firstWord) {
+                continue;
+            }
+            stack.openClose[key].pop();
+            if (stack.sequence.length == 0 || stack.sequence.pop()[0] != key) {
+                stack.errorMessage.push([firstWord, docLineNumber, 'falsche Reihenfolge']);
+            }
+        }
+    }
+    if (firstWord == 'ELSE') {
+        handleElse(firstWord, docLineNumber, stack);
+    }
+    if (firstWord == 'GROUP_BEGIN') {
+        handleGroupBegin(firstWord, groupID, groupName, docLineNumber, stack);
+    }
+    if (firstWord == 'GROUP_END') {
+        handleGroupEnd(firstWord, groupID, groupName, docLineNumber, stack);
+    }
+}
 
 
-function handleElse(firstWord, lineNumber, stack) {
+function handleElse(firstWord, docLineNumber, stack) {
     if (stack.sequence.length == 0 || stack.sequence[stack.sequence.length - 1][0] != 'IF' ||
         stack.lastIf[stack.lastIf.length - 1] == stack.sequence[stack.sequence.length - 1][1]
     ) {
-        stack.errorMessage.push([firstWord, lineNumber, 'falsche Reihenfolge']);
+        stack.errorMessage.push([firstWord, docLineNumber, 'falsche Reihenfolge']);
     } else {
         stack.lastIf.push(stack.sequence[stack.sequence.length - 1][1]);
     }
 }
 
-// Funktion zur Behandlung von GROUP_BEGIN
-function handleGroupBegin(firstWord, groupID, groupName, lineNumber, stack) {
-    if (stack.sequenceGroup.includes(groupID)) {
-        stack.errorMessage.push([firstWord, lineNumber, `GROUP_BEGIN(${groupID}${groupName}) hat bereits eine offene Gruppe`]);
+function handleGroupBegin(firstWord, groupID, groupName, docLineNumber, stack) {
+    if (stack.sequenceGroup.length != 0 && stack.sequenceGroup.indexOf(groupID) != -1) {
+        stack.errorMessage.push([firstWord, docLineNumber, 'GROUP_BEGIN(' + groupID + groupName + ' hat bereits eine offene Gruppe']);
     }
-    stack.group.push([`GROUP_BEGIN(${groupID}${groupName})`, lineNumber, 'nicht geschlossen']);
+    stack.group.push(['GROUP_BEGIN(' + groupID + groupName + ')', docLineNumber, 'nicht geschlossen']);
     stack.sequenceGroup.push(groupID);
 }
 
-// Funktion zur Behandlung von GROUP_END
-function handleGroupEnd(firstWord, groupID, groupName, lineNumber, stack) {
-    if (stack.sequenceGroup.length === 0 || groupID !== stack.sequenceGroup[stack.sequenceGroup.length - 1]) {
-        stack.errorMessage.push([firstWord, lineNumber, `GROUP_END(${groupID}${groupName}) in falscher Reihenfolge`]);
+function handleGroupEnd(firstWord, groupID, groupName, docLineNumber, stack) {
+    if (stack.sequenceGroup.length == 0 || groupID != stack.sequenceGroup[stack.sequenceGroup.length - 1]) {
+        stack.errorMessage.push([firstWord, docLineNumber, 'GROUP_END(' + groupID + groupName + ' in falscher Reihenfolge']);
     }
     stack.sequenceGroup.pop();
     stack.group.pop();
 }
 
-//============================================================
-// Überprüft ob Anweisungen paarweise vorkommen
-//============================================================
-function checkIndentationSequence(cncCode) {
-    var stack = initializeStack();
-    //var regex = new RegexDictionary();
-    var instruction = {
-        'IF': 'ENDIF',
-        'WHILE': 'ENDWHILE',
-        'LOOP': 'ENDLOOP',
-        'FOR': 'ENDFOR',
-        'GROUP_BEGIN': 'GROUP_END',
-        'REPEAT': 'UNTIL'
+function checkBrackets(lineData, stack) {
+    var stackBracket = [];
+    var bracketes = {
+        '(': ')',
+        '{': '}',
+        '[': ']'
     };
+    var line = lineData.code.replace(regex.string, "");
 
-    var progName = getProgName(cncCode[0]);
-
-    for (var i = 0; i < cncCode.length; i++) {
-        var lineNumber = i + 1;
-        var line = cncCode[i].replace(/^\s*(N\d+\s*)?/, "");
-
-        if (regex.newProgram.test(line)) {
-            if (stack.sequence.length != 0 || stack.errorMessage.length != 0) {
-                break;
+    for (var n = 0; n < line.length; n++) {
+        if (line[n] in bracketes) {
+            stackBracket.push(line[n]);
+            continue;
+        }
+        for (var key in bracketes) {
+            if (bracketes[key] != line[n]) {
+                continue;
             }
-            progName = getProgName(line);
-        }
-        var cleanedLine = line.replace(regex.comment, "");
-
-        // Regex-Matching
-        var match = cleanedLine.match(regex.instruction);
-
-        // Frühzeitiges Beenden bei GOTO-Instruktionen
-        if (regex.gotoInstruction.test(cleanedLine)) {
-            continue;
-        }
-
-        // Frühzeitiges Beenden bei REPEAT mit zusätzlichem Inhalt
-        if (match && match[1].toUpperCase() === 'REPEAT' && match[3] !== '') {
-            continue;
-        }
-        // Überprüfung auf gültige Instruktionen
-        var firstWord = "";
-        if (match) {
-            firstWord = match[1].toUpperCase();
-            var groupID = match[2] || '';
-            var groupName = match[3] || '';
-
-        }
-        if (!instruction[firstWord] && !Object.values(instruction).includes(firstWord) && firstWord !== 'ELSE') {
-            continue
-        }
-
-        if (firstWord in instruction) {
-            stack.sequence.push([firstWord, lineNumber]);
-            stack.openClose[firstWord].push([firstWord, lineNumber, 'nicht geschlossen']);
-        } else {
-            for (var key in instruction) {
-                if (instruction[key] != firstWord) {
-                    continue;
-                }
-                stack.openClose[key].pop();
-                if (stack.sequence.length == 0 || stack.sequence.pop()[0] != key) {
-                    stack.errorMessage.push([firstWord, lineNumber, 'falsche Reihenfolge']);
-                }
+            if (stackBracket.length == 0 || key != stackBracket.pop()) {
+                stack.errorMessage.push(['Klammer', lineData.docLineNum, 'nicht geöffnet']);
             }
         }
-        if (firstWord == 'ELSE') {
-            handleElse(firstWord, lineNumber, stack);
-            continue;
-        }
-        if (firstWord == 'GROUP_BEGIN') {
-            handleGroupBegin(firstWord, groupID, groupName, lineNumber, stack);
-            continue;
-        }
-        if (firstWord == 'GROUP_END') {
-            handleGroupEnd(firstWord, groupID, groupName, lineNumber, stack);
-        }
     }
-    for (var key in stack.openClose) {
-        for (var i = 0; i < stack.openClose[key].length; i++) {
-            stack.errorMessage.push(stack.openClose[key][i]);
-        }
+    if (stackBracket.length != 0) {
+        stack.errorMessage.push(['Klammer', lineData.docLineNum, 'nicht geschlossen']);
     }
-    return printFaults(progName, stack.errorMessage);
 }
 
-
-function initializeError(){
-    return {
-        progName: '',
-        lineNum: '',
-        group: '',
-        message: ''
-    };
+function unchangeLine(oneLine) {
+    if (regex.noNcCode.test(oneLine)) {
+        oneLine = oneLine.trim();
+        return oneLine;
+    }
+    return false;
 }
 
+function renumberDoc(line, lineData, newDoc, setting, tab) {
+    var step = setting.inc;
 
+    var result = unchangeLine(line);
+    if ((result) != false) {
+        newDoc.push(result);
+        return;
+    }
+    line = line.replace(regex.lineNumer, '');
 
-//============================================================
-// Fehlerausgabe im Ausgabefenster
-//============================================================
+    if (lineData.code || (lineData.orgNum && lineData.comment)) {
+        line = line.trim();
+        if (regex.closeInstruction.test(line) && lineData.indentLevel > 0) {
+            lineData.indentLevel--;
+        }
+        var space = ' ';
+        for (var n = 0; n < lineData.indentLevel; n++) {
+            space += tab;
+        }
+        if ((regex.openInstruction.test(line) && !regex.gotoInstruction.test(line))) {
+            lineData.indentLevel++;
+        }
+    }
+    if (line) {
+        line = 'N' + lineData.lineNum + space + line;
+        newDoc.push(line);
+        lineData.lineNum += step;
+        lineData.emptyLines = 0;
+        return;
+    }
+    deleteEmptyLines(line, lineData, newDoc)
+}
+
 function printFaults(progamName, errorMessage) {
     var isFault = false;
     for (var i = 0; i < errorMessage.length; i++) {
-        UltraEdit.outputWindow.write(`Im Programm >> ${progamName} >> ${errorMessage[i][0]} << ${errorMessage[i][2]} ==> Zeile ${errorMessage[i][1]}`);
+        createMessage('Im Programm >> ' + progamName + ' >> ' + errorMessage[i][0] + ' << ' + errorMessage[i][2] + ' ==> Zeile ' + errorMessage[i][1]);
         printOneFault(errorMessage[i]);
-        UltraEdit.outputWindow.showWindow(true);
+        if (UltraEdit.activeDocument) {
+            UltraEdit.outputWindow.showWindow(true);
+        }
         isFault = true;
     }
     return isFault;
 }
 
-//============================================================
-// Fehlerausgabe mit Zeilennummer als Link
-//============================================================
 function printOneFault(message) {
-    var pathDoc = unescape(encodeURIComponent(UltraEdit.activeDocument.path));
-    UltraEdit.outputWindow.write(`${pathDoc} (${message[1]}):`);
-    UltraEdit.outputWindow.write("======================================================================");
+    if (UltraEdit.activeDocument) {
+        var pathDoc = unescape(encodeURIComponent(UltraEdit.activeDocument.path));
+    } else {
+        var pathDoc = 'unbekanntes Dokument';
+    }
+    createMessage(pathDoc + "(" + message[1] + "): ");
+    createMessage("======================================================================");
 }
 
-//============================================================
-// Programmaufruf
-//============================================================
 main()
-
